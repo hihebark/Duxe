@@ -48,8 +48,9 @@ logging.addLevelName( logging.WARNING, "\033[92m[!]\033[0m")
 logging.addLevelName( logging.ERROR, "\033[91m[E]\033[0m")
 logging.addLevelName( logging.INFO, "\033[94m[*]\033[0m")
 logging.addLevelName( logging.CRITICAL, "\033[91m[?]\033[0m")
+logging.addLevelName( logging.DEBUG, "")
 logger = logging.getLogger('Duxe')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
 console_format = logging.Formatter('%(levelname)s %(message)s')
@@ -80,8 +81,7 @@ def make_request(m_url):
     try:
         return requests.get(url=m_url)
     except:
-        raise
-        print sys.exc_info()[0]
+        pass
 
 def get_ip_from_url(m_url):
     try:
@@ -98,7 +98,7 @@ def get_list_cms(m_cms = dict()):
             m_cms[line.rstrip('\n')] = 0
     return m_cms
 
-def get_information(m_url, m_nmap, m_robot):
+def get_information(m_url, m_nmap):
     m_url_ip = get_ip_from_url(m_url)
     if m_url_ip == False:
         print warningText("didn't retrieve IP of the Host. Try again.")
@@ -108,11 +108,11 @@ def get_information(m_url, m_nmap, m_robot):
         try:
             m_shodan = shodan.Shodan(SHODAN_API_KEY)
             m_info_shodan = m_shodan.host(m_url_ip)
-            logger.info(" Organization: %s\tOS: %s"%(m_info_shodan.get('org', 'n/a')), m_info_shodan.get('os', 'n/a'))
-            logger.info(" Vulnerability: %s"%redText(''.join(m_info_shodan[u'vulns'])))
-            logger.info(" Number of open port: %s"%redText(str(len(m_info_shodan.get('ports', 'n/a')))))
+            logger.info(" Organization: %s\tOS: %s"%(m_info_shodan.get('org', 'None'), m_info_shodan.get('os', 'None')))
+            logger.info(" Vulnerability: %s"%str(''.join(m_info_shodan.get('vulns', 'None'))))
+            logger.info(" Number of open port: %s"%str(len(m_info_shodan.get('ports', '0'))))
             for m_data in m_info_shodan['data']:
-                logger.info("%s : %s"%(m_data['port'], m_data['data']))
+                logger.debug("%s : %s"%(m_data['port'], m_data['data']))
             if m_nmap:
                 logger.info("Making Nmap test:")
                 logger.info(make_nmap_test(m_url_ip))
@@ -139,7 +139,7 @@ def get_subdomains(m_url):
     for m_subdomains in m_subdomain_list:
         if not m_subdomains == "":
             m_status_code = make_request(m_subdomains).status_code if make_request(m_subdomains) else "500"
-            logger.info(" %s  -  %s"%(m_subdomains, m_status_code))
+            logger.debug(" %s  -  %s"%(m_subdomains, m_status_code))
 
 def what_cms_is_using(m_url):
     m_soupe = BeautifulSoup(make_request(m_url).text, 'html5lib')
@@ -160,17 +160,15 @@ def main():
     parser = argparse.ArgumentParser(description="Duxe - Information gathering tool.")
     parser.add_argument("-host", help="The target to test exemple: 'exemple.com'")
     parser.add_argument("-nmap", help="Make a Nmap test", action="store_true")
-    parser.add_argument("-robot", help="search for robot file", action="store_true")
     parser.add_argument("-log", help="Log the output to a file", action="store_true")
     parser.add_argument("-tor", help="Use tor to make the request", action="store_true")
-    parser.add_argument("-version", help="Use tor to make the request", action="store_true")
+    parser.add_argument("-version", help="Print version and exit", action="store_true")
     args = parser.parse_args()
     if args.version:
         print redText(VERSION)
         exit(1)
     m_host = args.host if args.host is not None else exit(1)
     m_nmap = True if args.nmap else False
-    m_robot = True if args.robot else False
     m_log_to_file = True if args.log else False
     if args.tor:
         socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, '127.0.0.1', 9050)
@@ -179,9 +177,9 @@ def main():
         m_date = datetime.datetime.today()
         init_logging(m_log_to_file, m_date.strftime("%Y-%M-%d-%H:%M:%S")+"-"+m_host)
         if m_log_to_file: logger.info("log file on /logs/%s.log"%(str(m_date.strftime("%Y-%M-%d-%H:%M:%S"))+"-"+m_host))
-        get_information(m_host, m_nmap, m_robot)
-        get_subdomains(m_host)
-        what_cms_is_using(m_host)
+        get_information(m_host, m_nmap)
+        #get_subdomains(m_host)
+        #what_cms_is_using(m_host)
 if __name__ == "__main__":
     try:
         print redText(BANNER)
