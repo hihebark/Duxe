@@ -13,12 +13,15 @@
 <h3>OR:</h3>
 you can do <code>pip install -r requirements.txt</code></p>
 <h2>Usage:</h2>
-<code>python duxe.py [-h] -host HOST [-nmap] [-robot] [-log] [-tor]
+<code>python duxe.py [-h] -host HOST [-nmap] [-robot] [-log] [-tor]</code><br>
+<code>
   -h, --help  show this help message and exit
   -host HOST  The target to test exemple: 'exemple.com'
   -nmap       Make a Nmap test
   -log        Log the output to a file
   -tor        Use tor to make the request
   -version    Print version and exit</code>
-<h3>Exemple: pythont duxe.py -host exemple.com -tor -log</h3>
+<h3>Exemple:</h3>
+<code>python duxe.py -host exemple.com -tor -log</code><br>
 <a href="https://hihebark.wordpress.com/2017/08/26/made-a-domain-information-gathering-tool/">more about the tool</a>
+

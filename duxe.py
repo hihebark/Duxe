@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 
 from bs4 import BeautifulSoup
-from re import search, escape, match
+from tabulate import tabulate
+import re
 import socket, socks
 import shodan
 import argparse
 import requests
-import sys
+import sys, os
 import logging
 import datetime
 
@@ -22,6 +23,7 @@ author: hihebark
 .| | || | |\ \// ._|
  |___/\___|/\_\\___/
 Information gathering
+or Recon Tool
 """
 
 GREEN = '\033[92m'
@@ -30,13 +32,14 @@ RED = '\033[91m'
 END = '\033[0m'
 SHODAN_API_KEY = "vbdpLUW9aUxJGw05kAkLTfti5wsQgz7s"
 BUILTWITH = "e1cedafd-9a08-40ed-84d8-20537051d108"
+HUNTER_API = "c2d02b25fabd7310e43bfe216c518bad72a9cc5d"
 VERSION = "duxe 0.0.2"
 BANNER = """. . . . . . . . . . 
  . . . . /\____. . .
 . ./) . /  `'"'`> . 
  . ||. (   .  . |. .
-. _\\\ ./`    ×  ) . 
- | . \/_ _ __¨ |___ 
+. _\\\ ./`    x  ) . 
+ | . \/_ _ __¨„|___ 
 .| | || | |\ \// ._|
  |___/\___|/\_\\\___/v0.0.2
 """
@@ -79,8 +82,9 @@ def get_base_url(m_url):
 def make_request(m_url):
     if not is_valid_url(m_url):m_url = make_valid_url(m_url)
     try:
-        return requests.get(url=m_url)
-    except:
+        return requests.get(url=m_url, timeout=(3,7))
+    except :
+        logger.critical("Requests: time out")
         pass
 
 def get_ip_from_url(m_url):
@@ -90,10 +94,12 @@ def get_ip_from_url(m_url):
         return False
 
 def make_nmap_test(m_ip):
-    return make_request("http://api.hackertarget.com/nmap/?q="+m_ip).text
+    return requests.get(url="http://api.hackertarget.com/nmap/?q="+m_ip).text
 
 def get_list_cms(m_cms = dict()):
-    with open('libs/cms_list.txt') as m_cms_list:
+    m_path_duxe = os.path.dirname(__file__)
+    m_libs_cms_list = '/libs/cms_list.txt'
+    with open('%s%s'%(m_path_duxe, m_libs_cms_list), 'r') as m_cms_list:
         for line in m_cms_list:
             m_cms[line.rstrip('\n')] = 0
     return m_cms
@@ -136,6 +142,7 @@ def get_subdomains(m_url):
         for m_subdomains in m_request_ht.text.split('\n'):
             if m_subdomains.split(',')[0] not in m_subdomain_list:
                 m_subdomain_list.insert(0, m_subdomains.split(',')[0])
+    #test if ther'is only one subdomain print to brut
     for m_subdomains in m_subdomain_list:
         if not m_subdomains == "":
             m_status_code = make_request(m_subdomains).status_code if make_request(m_subdomains) else "500"
@@ -145,16 +152,40 @@ def what_cms_is_using(m_url):
     m_soupe = BeautifulSoup(make_request(m_url).text, 'html5lib')
     if m_soupe.find(attrs={'name':'generator'}):
         logger.info("I'am using: %s"%m_soupe.find(attrs={'name':'generator'}).get("content"))
+        if re.search('wordpress', m_soupe.find(attrs={'name':'generator'}).get("content"),re.I):
+            version = re.split(' ', m_soupe.find(attrs={'name':'generator'}).get("content"))[1]
+            json_response = make_request("https://wpvulndb.com/api/v2/wordpresses/"+version.replace('.', "")).json()
+            if len(json_response[version]['vulnerabilities']) is not 0:
+                for m_vuln in json_response[version]['vulnerabilities']:
+                    print "id: %s - title: %s - references: %s"%(m_vuln['id'], m_vuln['title'], m_vuln['references']['url'])
+            else:
+                logger.info("No vulnerabilitie found on this version")
+        #intersting stuff here > https://wpvulndb.com/api | here to > https://hunter.io/api/docs#domain-search
     else:
         m_cms = get_list_cms()
         m_builtwith = make_request("https://api.builtwith.com/free1/api.json?KEY="+BUILTWITH+"&LOOKUP="+m_url).json()
         for m_group_name in m_builtwith['groups']:
             for m_categories in m_group_name['categories']:
                 for m in m_cms:
-                    if search(escape(m.lower()), m_categories['name'].lower()):
+                    if re.search(re.escape(m.lower()), m_categories['name'].lower()):
                         m_cms[m] += 1
         #end Builtwith
-        logger.info("I'am using: None" if max(m_cms.values())== 0 else "I'am using: %s"%max(m_cms, key=m_cms.get))
+        use_cms = "I'am using: None" if max(m_cms.values()) == 0 or None else "I'am using: %s"%max(m_cms, key=m_cms.get)
+        logger.info(use_cms)
+
+def get_personnel_info(m_url, m_table = []):
+    m_request = make_request("https://api.hunter.io/v2/domain-search?domain="+m_url+"&api_key="+HUNTER_API)
+    json_response = m_request.json()
+    if json_response['meta']['results'] != 0:
+        print "Result: %s"%json_response['meta']['results']
+        header = ['Nbr','Name', 'E-mail', 'Type', 'Position']
+        for m_data in json_response['data']['emails']:
+            m_name = "%s %s"%(m_data[u'last_name'], m_data[u'first_name'])
+            m_table.insert(len(m_table), (len(m_table)+1,m_name, m_data[u'value'] , m_data['type'], m_data[u'position']))
+        m_make_table = tabulate(m_table, headers=header, tablefmt="fancy_grid")
+        logger.info("Personnel information \n%s"%m_make_table)
+    else:
+        logger.critical("Nothing to enumerate on this domain")
 
 def main():
     parser = argparse.ArgumentParser(description="Duxe - Information gathering tool.")
@@ -162,6 +193,7 @@ def main():
     parser.add_argument("-nmap", help="Make a Nmap test", action="store_true")
     parser.add_argument("-log", help="Log the output to a file", action="store_true")
     parser.add_argument("-tor", help="Use tor to make the request", action="store_true")
+    parser.add_argument("-e-user", help="Enumerating the users on the web site show if find 10 results", action="store_true")
     parser.add_argument("-version", help="Print version and exit", action="store_true")
     args = parser.parse_args()
     if args.version:
@@ -173,13 +205,14 @@ def main():
     if args.tor:
         socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, '127.0.0.1', 9050)
         socket.socket = socks.socksocket
-    if not match(r'[0-9]+(?:\.[0-9]+){3}', m_host):
+    if not re.match(r'[0-9]+(?:\.[0-9]+){3}', m_host):
         m_date = datetime.datetime.today()
         init_logging(m_log_to_file, m_date.strftime("%Y-%M-%d-%H:%M:%S")+"-"+m_host)
         if m_log_to_file: logger.info("log file on /logs/%s.log"%(str(m_date.strftime("%Y-%M-%d-%H:%M:%S"))+"-"+m_host))
         get_information(m_host, m_nmap)
-        #get_subdomains(m_host)
-        #what_cms_is_using(m_host)
+        get_subdomains(m_host)
+        what_cms_is_using(m_host)
+        if args.e_user:get_personnel_info(m_host)
 if __name__ == "__main__":
     try:
         print redText(BANNER)
