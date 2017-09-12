@@ -33,6 +33,7 @@ END = '\033[0m'
 SHODAN_API_KEY = "vbdpLUW9aUxJGw05kAkLTfti5wsQgz7s"
 BUILTWITH = "e1cedafd-9a08-40ed-84d8-20537051d108"
 HUNTER_API = "c2d02b25fabd7310e43bfe216c518bad72a9cc5d"
+VIRUSTOTAL_API = "36f3dea93e5d12f49857f0a04ff9075dc4b7ce66564fb9cc2a4aade2b1c13e36"
 VERSION = "duxe 0.0.2"
 BANNER = """. . . . . . . . . . 
  . . . . /\____. . .
@@ -73,6 +74,14 @@ def is_valid_url(m_url):
 def make_valid_url(m_url):
     return 'http://'+m_url+'/'
 
+def get_list_ip(m_port = dict()):
+    m_path_duxe = os.path.dirname(__file__)
+    m_libs_port_list = 'libs/port_list.txt' if m_path_duxe == "" else '/libs/port_list.txt'
+    with open('%s%s'%(m_path_duxe, m_libs_port_list), 'r') as m_port_list:
+        for line in m_port_list:
+            m_port[line.rstrip('\n').split(' ')[0]] = line.rstrip('\n').split(' ')[1]
+    return m_port
+
 def get_base_url(m_url):
     if m_url.startswith('http://') or m_url.startswith('https://'):
         m_url = m_url.split('http://')[1] if m_url.startswith('http://') else m_url.split('https://')[1]
@@ -84,8 +93,8 @@ def make_request(m_url):
     try:
         return requests.get(url=m_url, timeout=(3,7))
     except :
-        logger.critical("Requests: time out")
-        pass
+        #logger.critical("Requests: time out")
+        return None
 
 def get_ip_from_url(m_url):
     try:
@@ -107,7 +116,7 @@ def get_list_cms(m_cms = dict()):
 def get_information(m_url, m_nmap):
     m_url_ip = get_ip_from_url(m_url)
     if m_url_ip == False:
-        print warningText("didn't retrieve IP of the Host. Try again.")
+        print warningText("Didn't retrieve IP of the Host. Try again.")
     else:
         logger.info(" Host: %s\t\tIP: %s"%(m_url, m_url_ip))
         #print " Host: %s\t\tIP: %s"%(redText(m_url), redText(m_url_ip))
@@ -117,8 +126,10 @@ def get_information(m_url, m_nmap):
             logger.info(" Organization: %s\tOS: %s"%(m_info_shodan.get('org', 'None'), m_info_shodan.get('os', 'None')))
             logger.info(" Vulnerability: %s"%str(''.join(m_info_shodan.get('vulns', 'None'))))
             logger.info(" Number of open port: %s"%str(len(m_info_shodan.get('ports', '0'))))
-            for m_data in m_info_shodan['data']:
-                logger.debug("%s : %s"%(m_data['port'], m_data['data']))
+            #print m_info_shodan
+            for m_data in m_info_shodan.get('data'):
+                name_port = get_list_ip()[str(m_data['port'])] if str(m_data['port']) in get_list_ip() else ""
+                logger.debug("%s\t%s\t%s"%(m_data['port'], m_data['transport'], name_port))
             if m_nmap:
                 logger.info("Making Nmap test:")
                 logger.info(make_nmap_test(m_url_ip))
@@ -138,33 +149,48 @@ def get_subdomains(m_url):
             if m_subdomains not in m_subdomain_list:
                 m_subdomain_list.insert(0, m_subdomains)
     m_request_ht = requests.get("http://api.hackertarget.com/hostsearch/?q="+m_url)
-    if not len(m_request_ht.text)==0:
-        for m_subdomains in m_request_ht.text.split('\n'):
-            if m_subdomains.split(',')[0] not in m_subdomain_list:
-                m_subdomain_list.insert(0, m_subdomains.split(',')[0])
+    if m_request_ht.status_code == 200:
+        if not len(m_request_ht.text)==0:
+            for m_subdomains in m_request_ht.text.split('\n'):
+                if m_subdomains.split(',')[0] not in m_subdomain_list:
+                    m_subdomain_list.insert(0, m_subdomains.split(',')[0])
+    mparams = {'domain': m_url, 'apikey': VIRUSTOTAL_API}
+    m_request_vt = requests.get(url='https://www.virustotal.com/vtapi/v2/domain/report', params = mparams)
+    json_response_vt = m_request_vt.json()
+    if m_request_vt.status_code == 200 and json_response_vt['response_code'] == 1:
+        for msubdomain in json_response_vt['detected_urls']:
+            if msubdomain['url'] not in m_subdomain_list:
+                m_subdomain_list.insert(0, msubdomain['url'])
     #test if ther'is only one subdomain print to brut
+    logger.info("Found {}".format(len(m_subdomain_list)))
     for m_subdomains in m_subdomain_list:
         if not m_subdomains == "":
-            m_status_code = make_request(m_subdomains).status_code if make_request(m_subdomains) else "500"
-            logger.debug(" %s  -  %s"%(m_subdomains, m_status_code))
+            #m_status_code = make_request(m_subdomains).status_code if make_request(m_subdomains) else "500"
+            m_status_code = greenText(u"✔") if make_request(m_subdomains) else redText(u"✘")
+            logger.debug(u" {0} - {1}".format(m_subdomains, m_status_code))
 
 def what_cms_is_using(m_url):
-    m_soupe = BeautifulSoup(make_request(m_url).text, 'html5lib')
-    if m_soupe.find(attrs={'name':'generator'}):
-        logger.info("I'am using: %s"%m_soupe.find(attrs={'name':'generator'}).get("content"))
-        if re.search('wordpress', m_soupe.find(attrs={'name':'generator'}).get("content"),re.I):
-            version = re.split(' ', m_soupe.find(attrs={'name':'generator'}).get("content"))[1]
-            json_response = make_request("https://wpvulndb.com/api/v2/wordpresses/"+version.replace('.', "")).json()
-            if len(json_response[version]['vulnerabilities']) is not 0:
-                for m_vuln in json_response[version]['vulnerabilities']:
-                    print "id: %s - title: %s - references: %s"%(m_vuln['id'], m_vuln['title'], m_vuln['references']['url'])
-            else:
-                logger.info("No vulnerabilitie found on this version")
-        #intersting stuff here > https://wpvulndb.com/api | here to > https://hunter.io/api/docs#domain-search
+    if make_request(m_url) is not None:
+        m_soupe = BeautifulSoup(make_request(m_url).text, 'html5lib')
+        if m_soupe.find(attrs={'name':'generator'}):
+            logger.info("I'am using: %s"%m_soupe.find(attrs={'name':'generator'}).get("content"))
+            if re.search('wordpress', m_soupe.find(attrs={'name':'generator'}).get("content"),re.I):
+                version = re.split(' ', m_soupe.find(attrs={'name':'generator'}).get("content"))[1]
+                json_response = make_request("https://wpvulndb.com/api/v2/wordpresses/"+version.replace('.', "")).json()
+                if len(json_response[version]['vulnerabilities']) is not 0:
+                    for m_vuln in json_response[version]['vulnerabilities']:
+                        #url_vuln = [' '.join(v) for v in m_vuln[u'references']]
+                        print "id: %s - title: %s\n\treferences: %s"%(m_vuln['id'], m_vuln['title'], m_vuln[u'references'][u'url'])
+                else:
+                    logger.info("No vulnerabilitie found on this version")
     else:
+        #intersting stuff here > https://wpvulndb.com/api | here to > https://hunter.io/api/docs#domain-search
+        #error here to fix
         m_cms = get_list_cms()
-        m_builtwith = make_request("https://api.builtwith.com/free1/api.json?KEY="+BUILTWITH+"&LOOKUP="+m_url).json()
-        for m_group_name in m_builtwith['groups']:
+        m_builtwith = requests.get(url = "https://api.builtwith.com/free1/api.json?KEY="+BUILTWITH+"&LOOKUP="+m_url)
+        json_response = m_builtwith.json()
+        #TODO hold error of unknown domain
+        for m_group_name in json_response['groups']:
             for m_categories in m_group_name['categories']:
                 for m in m_cms:
                     if re.search(re.escape(m.lower()), m_categories['name'].lower()):
@@ -177,7 +203,7 @@ def get_personnel_info(m_url, m_table = []):
     m_request = make_request("https://api.hunter.io/v2/domain-search?domain="+m_url+"&api_key="+HUNTER_API)
     json_response = m_request.json()
     if json_response['meta']['results'] != 0:
-        print "Result: %s"%json_response['meta']['results']
+        #print "Result: %s"%json_response['meta']['results']
         header = ['Nbr','Name', 'E-mail', 'Type', 'Position']
         for m_data in json_response['data']['emails']:
             m_name = "%s %s"%(m_data[u'last_name'], m_data[u'first_name'])
@@ -213,6 +239,8 @@ def main():
         get_subdomains(m_host)
         what_cms_is_using(m_host)
         if args.e_user:get_personnel_info(m_host)
+        #to add this > https://crt.sh/
+
 if __name__ == "__main__":
     try:
         print redText(BANNER)
