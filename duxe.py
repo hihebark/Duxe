@@ -30,10 +30,10 @@ GREEN = '\033[92m'
 BLUE = '\033[94m'
 RED = '\033[91m'
 END = '\033[0m'
-SHODAN_API_KEY = "vbdpLUW9aUxJGw05kAkLTfti5wsQgz7s"
-BUILTWITH = "e1cedafd-9a08-40ed-84d8-20537051d108"
-HUNTER_API = "c2d02b25fabd7310e43bfe216c518bad72a9cc5d"
-VIRUSTOTAL_API = "36f3dea93e5d12f49857f0a04ff9075dc4b7ce66564fb9cc2a4aade2b1c13e36"
+SHODAN_API_KEY = "-- YOUR API KEY --"
+BUILTWITH = "-- YOUR API KEY --"
+HUNTER_API = "-- YOUR API KEY --"
+VIRUSTOTAL_API = "-- YOUR API KEY --"
 VERSION = "duxe 0.0.2"
 BANNER = """. . . . . . . . . . 
  . . . . /\____. . .
