@@ -1,4 +1,4 @@
-requests==2.20.0
+requests==2.31.0
 beautifulsoup4==4.6.0
 shodan==1.7.4
 SocksiPy_branch==1.01
